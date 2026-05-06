@@ -21,9 +21,9 @@ window.MathJax = { tex: { inlineMath: [['\\(','\\)'], ['$', '$']] }, svg: { font
 <section class="card spaceCard"><canvas id="canvas"></canvas><div class="status"><b id="statusTitle">Kruhová dráha</b><small id="statusText">Družice má přibližně správnou rychlost pro kruhovou trajektorii.</small></div></section>
 <aside class="card"><div class="controls">
 <div class="controlBox"><div class="row"><label for="hRange">Výška nad povrchem \(h\)</label><div class="value" id="hVal">400 km</div></div><input id="hRange" type="range" min="100" max="40000" step="50" value="400"><div class="hint">Nízká oběžná dráha má několik set kilometrů. Geostacionární družice je asi 35 786 km nad povrchem.</div><div class="quickBtns"><button data-h="400">ISS</button><button data-h="20000">GPS</button><button data-h="35786">GEO</button></div></div>
-<div class="controlBox"><div class="row"><label for="vRange">Rychlost družice \(v\)</label><div class="value" id="vVal">7,67 km·s⁻¹</div></div><input id="vRange" type="range" min="0" max="16" step="0.01" value="7.67"><div class="quickBtns"><button id="setCircular">Kruhová</button><button id="setEscape">Úniková</button><button id="pauseBtn">Pauza</button></div></div>
-<div class="numbers"><div class="num"><div class="name">Kruhová rychlost</div><div class="big ok" id="vcVal"></div></div><div class="num"><div class="name">Úniková rychlost</div><div class="big warn" id="veVal"></div></div><div class="num"><div class="name">Poloměr od středu Země</div><div class="big" id="rVal"></div></div><div class="num"><div class="name">Poměr \(v/v_k\)</div><div class="big" id="ratioVal"></div></div></div>
-<div class="legend"><span class="pill">zobrazuje se jen aktuální trajektorie</span><span class="pill">zelená: kruhová</span><span class="pill">žlutá: eliptická</span><span class="pill">červená: úniková</span></div></div>
+<div class="controlBox"><div class="row"><label for="vRange">Rychlost družice \(v\)</label><div class="value" id="vVal">7,67 km·s⁻¹</div></div><input id="vRange" type="range" min="0" max="16" step="0.01" value="7.67"><div class="quickBtns"><button id="setCircular">Kruhová</button><button id="setImpact">Těsně nad Zemí</button><button id="setEscape">Úniková</button><button id="pauseBtn">Pauza</button></div></div>
+<div class="numbers"><div class="num"><div class="name">Kruhová rychlost</div><div class="big ok" id="vcVal"></div></div><div class="num"><div class="name">Úniková rychlost</div><div class="big warn" id="veVal"></div></div><div class="num"><div class="name">Kritická rychlost dopadu</div><div class="big bad" id="viVal"></div></div><div class="num"><div class="name">Periapsida dráhy</div><div class="big" id="rpVal"></div></div><div class="num"><div class="name">Poloměr od středu Země</div><div class="big" id="rVal"></div></div><div class="num"><div class="name">Poměr \(v/v_k\)</div><div class="big" id="ratioVal"></div></div></div>
+<div class="legend"><span class="pill">zobrazuje se jen aktuální trajektorie</span><span class="pill">zelená: kruhová</span><span class="pill">žlutá: eliptická</span><span class="pill">červená: náraz / únik</span></div></div>
 <div class="calc"><h2>Vzorové výpočty</h2><div class="hint">Používáme \(R_Z = 6\,371\,\text{km}\) a \(GM_Z = 3{,}986\cdot10^{14}\,\text{m}^3\text{·s}^{-2}\).</div>
 <details open><summary>1. Rychlost pro kruhovou trajektorii</summary><div class="formula" id="calcCircular"></div></details>
 <details open><summary>2. Úniková rychlost z dané výšky</summary><div class="formula" id="calcEscape"></div></details>
@@ -32,22 +32,175 @@ window.MathJax = { tex: { inlineMath: [['\\(','\\)'], ['$', '$']] }, svg: { font
 <script>
 const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 const hRange=document.getElementById('hRange'),vRange=document.getElementById('vRange');
-const hVal=document.getElementById('hVal'),vVal=document.getElementById('vVal'),vcVal=document.getElementById('vcVal'),veVal=document.getElementById('veVal'),rVal=document.getElementById('rVal'),ratioVal=document.getElementById('ratioVal'),calcCircular=document.getElementById('calcCircular'),calcEscape=document.getElementById('calcEscape'),statusTitle=document.getElementById('statusTitle'),statusText=document.getElementById('statusText'),pauseBtn=document.getElementById('pauseBtn');
+const hVal=document.getElementById('hVal'),vVal=document.getElementById('vVal'),vcVal=document.getElementById('vcVal'),veVal=document.getElementById('veVal'),rVal=document.getElementById('rVal'),ratioVal=document.getElementById('ratioVal'),viVal=document.getElementById('viVal'),rpVal=document.getElementById('rpVal'),calcCircular=document.getElementById('calcCircular'),calcEscape=document.getElementById('calcEscape'),statusTitle=document.getElementById('statusTitle'),statusText=document.getElementById('statusText'),pauseBtn=document.getElementById('pauseBtn');
 const MU=3.986004418e14,R_E=6371e3;let phase=0,lastTime=performance.now(),paused=false;
 function cz(n,d=2){return new Intl.NumberFormat('cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d}).format(n)}function czInt(n){return new Intl.NumberFormat('cs-CZ',{maximumFractionDigits:0}).format(n)}
-function values(){const hKm=+hRange.value,vKms=+vRange.value,r=R_E+hKm*1000,vc=Math.sqrt(MU/r)/1000,ve=Math.sqrt(2*MU/r)/1000,ratio=vKms/vc;let rp=null,willImpact=false;if(ratio<1&&ratio>0){const a=r/(2-ratio*ratio);rp=2*a-r;willImpact=rp<R_E;}return{hKm,vKms,r,vc,ve,ratio,rp,willImpact}}
-function updateTexts(){const{hKm,vKms,r,vc,ve,ratio,willImpact,rp}=values();hVal.textContent=`${czInt(hKm)} km`;vVal.textContent=`${cz(vKms)} km·s⁻¹`;vcVal.textContent=`${cz(vc)} km·s⁻¹`;veVal.textContent=`${cz(ve)} km·s⁻¹`;rVal.textContent=`${czInt(r/1000)} km`;ratioVal.textContent=cz(ratio,2);calcCircular.innerHTML=`\\[r=R_Z+h=6\\,371\\,\\text{km}+${czInt(hKm)}\\,\\text{km}\\]\\[r=${czInt(r/1000)}\\,\\text{km}=${cz(r,0)}\\,\\text{m}\\]\\[v_k=\\sqrt{\\frac{GM_Z}{r}}\\]\\[v_k=\\sqrt{\\frac{3{,}986\\cdot10^{14}}{${cz(r,0)}}}\\]\\[v_k\\doteq ${cz(vc)}\\,\\text{km·s}^{-1}\\]`;calcEscape.innerHTML=`\\[v_u=\\sqrt{\\frac{2GM_Z}{r}}\\]\\[v_u=\\sqrt{\\frac{2\\cdot3{,}986\\cdot10^{14}}{${cz(r,0)}}}\\]\\[v_u\\doteq ${cz(ve)}\\,\\text{km·s}^{-1}\\]\\[v_u=\\sqrt2\\,v_k\\]`;let t,s,c;if(vKms<.25*vc){t='Pád téměř přímo k Zemi';s='Rychlost je velmi malá. Družice by spadla k Zemi.';c='var(--bad)'}else if(vKms<vc&&willImpact){t='Náraz do Země';s=`Rychlost je menší než kruhová. Eliptická dráha protne povrch Země, takže družice spadne.`;c='var(--bad)'}else if(vKms<.92*vc){t='Eliptická dráha dovnitř';s='Rychlost je menší než kruhová. Družice se bude přibližovat k Zemi, ale v modelu ještě neprotne povrch.';c='var(--warn)'}else if(vKms<=1.08*vc){t='Přibližně kruhová dráha';s='Rychlost odpovídá kruhové trajektorii v dané výšce.';c='var(--ok)'}else if(vKms<ve){t='Eliptická dráha ven';s='Rychlost je větší než kruhová, ale menší než úniková.';c='var(--warn)'}else if(Math.abs(vKms-ve)/ve<.015){t='Parabolická úniková trajektorie';s='Rychlost je přibližně rovna únikové rychlosti. Hraniční dráha je parabola.';c='var(--bad)'}else{t='Hyperbolická úniková trajektorie';s='Rychlost je větší než úniková. Těleso uniká po hyperbole.';c='var(--bad)'}statusTitle.textContent=t;statusText.textContent=s;statusTitle.style.color=c;if(window.MathJax)MathJax.typesetPromise([calcCircular,calcEscape])}
+function values(){
+ const hKm=+hRange.value,vKms=+vRange.value;
+ const r=R_E+hKm*1000;
+ const vc=Math.sqrt(MU/r)/1000;
+ const ve=Math.sqrt(2*MU/r)/1000;
+ const ratio=vKms/vc;
+ const aCrit=(r+R_E)/2;
+ const vImpact=Math.sqrt(MU*(2/r-1/aCrit))/1000;
+ let rp=null,willImpact=false;
+ if(ratio<1&&ratio>0){
+   const a=r/(2-ratio*ratio);
+   rp=2*a-r;
+   willImpact=rp<R_E;
+ }
+ return{hKm,vKms,r,vc,ve,ratio,rp,willImpact,vImpact};
+}
+function updateTexts(){
+ const{hKm,vKms,r,vc,ve,ratio,willImpact,rp,vImpact}=values();
+ hVal.textContent=`${czInt(hKm)} km`;
+ vVal.textContent=`${cz(vKms)} km·s⁻¹`;
+ vcVal.textContent=`${cz(vc)} km·s⁻¹`;
+ veVal.textContent=`${cz(ve)} km·s⁻¹`;
+ viVal.textContent=`${cz(vImpact)} km·s⁻¹`;
+ rVal.textContent=`${czInt(r/1000)} km`;
+ ratioVal.textContent=cz(ratio,2);
+ if(rp===null){
+   rpVal.textContent='—';
+   rpVal.className='big';
+ }else{
+   rpVal.textContent=`${czInt(rp/1000)} km`;
+   rpVal.className=rp<R_E?'big bad':'big ok';
+ }
+
+ calcCircular.innerHTML=`\[r=R_Z+h=6\,371\,\text{km}+${czInt(hKm)}\,\text{km}\]\[r=${czInt(r/1000)}\,\text{km}=${cz(r,0)}\,\text{m}\]\[v_k=\sqrt{\frac{GM_Z}{r}}\]\[v_k=\sqrt{\frac{3{,}986\cdot10^{14}}{${cz(r,0)}}}\]\[v_k\doteq ${cz(vc)}\,\text{km·s}^{-1}\]`;
+ calcEscape.innerHTML=`\[v_u=\sqrt{\frac{2GM_Z}{r}}\]\[v_u=\sqrt{\frac{2\cdot3{,}986\cdot10^{14}}{${cz(r,0)}}}\]\[v_u\doteq ${cz(ve)}\,\text{km·s}^{-1}\]\[v_u=\sqrt2\,v_k\]`;
+
+ let t,s,c;
+ if(vKms<.25*vc){
+   t='Pád téměř přímo k Zemi';
+   s='Rychlost je velmi malá. Družice téměř neobíhá a padá k Zemi.';
+   c='var(--bad)';
+ }else if(vKms<vc&&willImpact){
+   t='Náraz do Země';
+   s=`Eliptická dráha protne povrch Země. Kritická rychlost pro tuto výšku je ${cz(vImpact)} km·s⁻¹.`;
+   c='var(--bad)';
+ }else if(vKms<vc){
+   t='Eliptická dráha dovnitř';
+   s='Rychlost je menší než kruhová. Družice se přibližuje k Zemi, ale periapsida je ještě nad povrchem.';
+   c='var(--warn)';
+ }else if(Math.abs(vKms-vc)/vc<.015){
+   t='Kruhová dráha';
+   s='Rychlost odpovídá kruhové trajektorii v dané výšce.';
+   c='var(--ok)';
+ }else if(vKms<ve){
+   t='Eliptická dráha ven';
+   s='Rychlost je větší než kruhová, ale menší než úniková. Družice zůstává gravitačně vázaná.';
+   c='var(--warn)';
+ }else if(Math.abs(vKms-ve)/ve<.015){
+   t='Parabolická úniková trajektorie';
+   s='Rychlost je přibližně rovna únikové rychlosti. Hraniční dráha je parabola.';
+   c='var(--bad)';
+ }else{
+   t='Hyperbolická úniková trajektorie';
+   s='Rychlost je větší než úniková. Těleso uniká po hyperbole.';
+   c='var(--bad)';
+ }
+ statusTitle.textContent=t;statusText.textContent=s;statusTitle.style.color=c;
+ if(window.MathJax)MathJax.typesetPromise([calcCircular,calcEscape]);
+}
 function resize(){const r=canvas.getBoundingClientRect(),d=devicePixelRatio||1;canvas.width=Math.round(r.width*d);canvas.height=Math.round(r.height*d);ctx.setTransform(d,0,0,d,0,0)}
-function makeTrajectory(cx,cy,rVisual,ratio,earthR){const pts=[];const escapeLimit=Math.sqrt(2)*.995;if(ratio<escapeLimit){const a=rVisual/Math.max(.08,2-ratio*ratio);if(ratio<1){const e=Math.max(.02,rVisual/a-1),rp=a*(1-e),impact=rp<earthR;const start=Math.PI;if(impact){let hit=false;for(let i=0;i<=420;i++){const th=start+2.2*Math.PI*i/420,rr=a*(1-e*e)/(1+e*Math.cos(th)),x=cx-rr*Math.cos(th),y=cy-rr*Math.sin(th);pts.push({x,y});if(i>5&&Math.hypot(x-cx,y-cy)<=earthR){hit=true;break}}return{type:'impact',pts}}else{for(let i=0;i<=360;i++){const th=2*Math.PI*i/360,rr=a*(1-e*e)/(1+e*Math.cos(th));pts.push({x:cx-rr*Math.cos(th),y:cy-rr*Math.sin(th)})}}}else{const e=Math.max(.02,1-rVisual/a);for(let i=0;i<=360;i++){const th=2*Math.PI*i/360,rr=a*(1-e*e)/(1+e*Math.cos(th));pts.push({x:cx+rr*Math.cos(th),y:cy+rr*Math.sin(th)})}}return{type:'ellipse',pts}}
-if(Math.abs(ratio-Math.sqrt(2))<.025){const p=2*rVisual,maxTheta=2.35;for(let i=0;i<=260;i++){const th=-maxTheta+2*maxTheta*i/260,rr=p/(1+Math.cos(th));if(rr<rVisual*8)pts.push({x:cx+rr*Math.cos(th),y:cy+rr*Math.sin(th)})}return{type:'parabola',pts}}
-const e=Math.max(1.05,ratio*ratio-1),p=rVisual*(1+e),asym=Math.acos(-1/e),maxTheta=Math.min(asym-.08,2.55);for(let i=0;i<=260;i++){const th=-maxTheta+2*maxTheta*i/260,rr=p/(1+e*Math.cos(th));if(rr>0&&rr<rVisual*9)pts.push({x:cx+rr*Math.cos(th),y:cy+rr*Math.sin(th)})}return{type:'hyperbola',pts}}
+function makeTrajectory(cx,cy,rVisual,ratio,earthR,rPhysical){
+ const pts=[];
+ const escapeLimit=Math.sqrt(2)*.995;
+
+ function visualRadius(rPhys){
+   const currentAlt=Math.max(1,rPhysical-R_E);
+   const clamped=Math.max(R_E, rPhys);
+   return earthR + ((clamped-R_E)/currentAlt)*(rVisual-earthR);
+ }
+
+ if(ratio<escapeLimit){
+   if(ratio<1&&ratio>0){
+     const aPhys=rPhysical/(2-ratio*ratio);
+     const e=Math.max(0.000001, rPhysical/aPhys - 1);
+     const pPhys=aPhys*(1-e*e);
+     const rpPhys=2*aPhys-rPhysical;
+     const impact=rpPhys<R_E;
+
+     // Velmi malé tečné rychlosti: pád je prakticky radiální, takže nekreslíme divnou velkou elipsu.
+     if(impact && ratio<0.35){
+       const bend=55*ratio;
+       for(let i=0;i<=90;i++){
+         const t=i/90;
+         const rr=rVisual + (earthR-rVisual)*t;
+         const x=cx + rr;
+         const y=cy + Math.sin(t*Math.PI)*bend;
+         pts.push({x,y});
+       }
+       return{type:'impact',pts};
+     }
+
+     // Rychlost pod kruhovou: aktuální poloha je apoapsida vpravo.
+     // Když elipsa protne Zemi, kreslíme jen skutečný úsek od apoapsidy k povrchu Země.
+     if(impact){
+       let cosHit=(pPhys/R_E - 1)/e;
+       cosHit=Math.max(-1,Math.min(1,cosHit));
+       const thetaHit=2*Math.PI - Math.acos(cosHit); // větev od apoapsidy k periapsidě
+       for(let i=0;i<=260;i++){
+         const th=Math.PI + (thetaHit-Math.PI)*i/260;
+         const rrPhys=pPhys/(1+e*Math.cos(th));
+         const rrVis=visualRadius(rrPhys);
+         pts.push({x:cx-rrVis*Math.cos(th), y:cy-rrVis*Math.sin(th)});
+       }
+       return{type:'impact',pts};
+     }
+
+     // Elipsa dovnitř, ale ještě nad povrchem.
+     const rAVis=rVisual;
+     const rPVis=visualRadius(rpPhys);
+     const aVis=(rAVis+rPVis)/2;
+     const eVis=Math.max(0.0001,Math.min(0.9999,(rAVis-rPVis)/(rAVis+rPVis)));
+     for(let i=0;i<=360;i++){
+       const th=2*Math.PI*i/360;
+       const rr=aVis*(1-eVis*eVis)/(1+eVis*Math.cos(th));
+       pts.push({x:cx-rr*Math.cos(th),y:cy-rr*Math.sin(th)});
+     }
+     return{type:'ellipse',pts};
+   }
+
+   // Rychlost větší než kruhová, ale menší než úniková: elipsa ven.
+   const aVisual=rVisual/Math.max(.08,2-ratio*ratio);
+   const e=Math.max(.02,1-rVisual/aVisual);
+   for(let i=0;i<=360;i++){
+     const th=2*Math.PI*i/360;
+     const rr=aVisual*(1-e*e)/(1+e*Math.cos(th));
+     pts.push({x:cx+rr*Math.cos(th),y:cy+rr*Math.sin(th)});
+   }
+   return{type:'ellipse',pts};
+ }
+
+ if(Math.abs(ratio-Math.sqrt(2))<.025){
+   // Parabola s ohniskem v Zemi a periapsidou v aktuálním bodě.
+   const p=2*rVisual;
+   const maxTheta=2.35;
+   for(let i=0;i<=260;i++){
+     const th=-maxTheta+2*maxTheta*i/260;
+     const rr=p/(1+Math.cos(th));
+     if(rr<rVisual*8)pts.push({x:cx+rr*Math.cos(th),y:cy+rr*Math.sin(th)});
+   }
+   return{type:'parabola',pts};
+ }
+
+ const e=Math.max(1.05,ratio*ratio-1),p=rVisual*(1+e),asym=Math.acos(-1/e),maxTheta=Math.min(asym-.08,2.55);
+ for(let i=0;i<=260;i++){
+   const th=-maxTheta+2*maxTheta*i/260,rr=p/(1+e*Math.cos(th));
+   if(rr>0&&rr<rVisual*9)pts.push({x:cx+rr*Math.cos(th),y:cy+rr*Math.sin(th)});
+ }
+ return{type:'hyperbola',pts};
+}
 function path(points,color,width=3){if(points.length<2)return;ctx.save();ctx.beginPath();ctx.setLineDash([10,8]);ctx.strokeStyle=color;ctx.lineWidth=width;ctx.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)ctx.lineTo(points[i].x,points[i].y);ctx.stroke();ctx.restore();ctx.setLineDash([])}
 function stars(w,h){ctx.fillStyle='rgba(255,255,255,.85)';for(let i=0;i<80;i++){const x=(i*73%997)/997*w,y=(i*191%887)/887*h,r=((i*37)%10)/10+.35;ctx.globalAlpha=.25+((i*29)%70)/100;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill()}ctx.globalAlpha=1}
 function earth(cx,cy,R){const g=ctx.createRadialGradient(cx-R*.35,cy-R*.35,R*.1,cx,cy,R);g.addColorStop(0,'#7fc7ff');g.addColorStop(.48,'#256de8');g.addColorStop(1,'#0a2d83');ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.fillStyle=g;ctx.fill();ctx.save();ctx.clip();ctx.fillStyle='rgba(101,220,128,.82)';ctx.beginPath();ctx.ellipse(cx-R*.22,cy-R*.05,R*.22,R*.38,-.65,0,7);ctx.fill();ctx.beginPath();ctx.ellipse(cx+R*.25,cy+R*.16,R*.26,R*.17,.35,0,7);ctx.fill();ctx.restore();ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.strokeStyle='rgba(180,220,255,.45)';ctx.lineWidth=2;ctx.stroke()}
 function sat(x,y,ang,color){ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.fillStyle='#d9e7ff';ctx.strokeStyle='rgba(255,255,255,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(-8,-8,16,16,4);ctx.fill();ctx.stroke();ctx.fillStyle=color;ctx.fillRect(-34,-5,24,10);ctx.fillRect(10,-5,24,10);ctx.strokeRect(-34,-5,24,10);ctx.strokeRect(10,-5,24,10);ctx.restore()}
 function tangent(pts,i){const a=pts[Math.max(0,i-2)],b=pts[Math.min(pts.length-1,i+2)];return Math.atan2(b.y-a.y,b.x-a.x)}
-function draw(now){const dt=Math.min((now-lastTime)/1000,.04);lastTime=now;const{hKm,vKms,vc,ratio}=values();if(!paused)phase+=dt*.075*Math.max(.12,Math.min(2.7,vKms/Math.max(vc,.1)));const w=canvas.clientWidth,h=canvas.clientHeight;ctx.clearRect(0,0,w,h);stars(w,h);const cx=w/2,cy=h/2+12,earthR=Math.min(w,h)*.135,rVisual=earthR+45+Math.sqrt(hKm/40000)*(Math.min(w,h)*.43-earthR-45);const tr=makeTrajectory(cx,cy,rVisual,ratio,earthR);const col=tr.type==='impact'?'rgba(255,123,123,.88)':(ratio>=Math.sqrt(2)*.995?'rgba(255,123,123,.88)':(Math.abs(ratio-1)<.08?'rgba(125,223,146,.86)':'rgba(255,207,110,.76)'));path(tr.pts,col,(ratio>=Math.sqrt(2)*.995||tr.type==='impact')?3:2.7);let ph=phase%1;if(tr.type!=='ellipse')ph=(phase*.75)%1;const idx=Math.min(tr.pts.length-1,Math.max(0,Math.floor(ph*(tr.pts.length-1)))),p=tr.pts[idx],ang=tangent(tr.pts,idx);ctx.beginPath();ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1.5;ctx.moveTo(cx,cy);ctx.lineTo(p.x,p.y);ctx.stroke();earth(cx,cy,earthR);const sc=(ratio>=Math.sqrt(2)*.995||tr.type==='impact')?'#ff7b7b':(Math.abs(ratio-1)<.08?'#7ddf92':'#ffcf6e');sat(p.x,p.y,ang,sc);const L=54+Math.min(70,vKms*5),tx=Math.cos(ang),ty=Math.sin(ang),ax=p.x+tx*L,ay=p.y+ty*L;ctx.beginPath();ctx.strokeStyle=sc;ctx.lineWidth=3;ctx.moveTo(p.x,p.y);ctx.lineTo(ax,ay);ctx.stroke();ctx.beginPath();ctx.fillStyle=sc;ctx.moveTo(ax,ay);ctx.lineTo(ax-tx*12-ty*6,ay-ty*12+tx*6);ctx.lineTo(ax-tx*12+ty*6,ay-ty*12-tx*6);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(234,242,255,.92)';ctx.font='700 14px system-ui';ctx.fillText('Země',cx-18,cy+5);ctx.fillText('v',ax+6,ay+4);ctx.fillStyle='rgba(159,179,209,.95)';ctx.font='13px system-ui';ctx.fillText(`h = ${czInt(hKm)} km`,p.x+12,p.y-14);if(tr.type==='impact'&&tr.pts.length){const q=tr.pts[tr.pts.length-1];ctx.save();ctx.strokeStyle='#ff7b7b';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(q.x-9,q.y-9);ctx.lineTo(q.x+9,q.y+9);ctx.moveTo(q.x+9,q.y-9);ctx.lineTo(q.x-9,q.y+9);ctx.stroke();ctx.restore()}requestAnimationFrame(draw)}
-hRange.oninput=vRange.oninput=updateTexts;document.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{hRange.value=b.dataset.h;vRange.value=(Math.sqrt(MU/(R_E+Number(hRange.value)*1000))/1000).toFixed(2);updateTexts()});document.getElementById('setCircular').onclick=()=>{vRange.value=values().vc.toFixed(2);updateTexts()};document.getElementById('setEscape').onclick=()=>{vRange.value=Math.min(16,values().ve).toFixed(2);updateTexts()};pauseBtn.onclick=()=>{paused=!paused;pauseBtn.textContent=paused?'Spustit':'Pauza'};addEventListener('resize',resize);if(!CanvasRenderingContext2D.prototype.roundRect){CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);return this}}
+function draw(now){const dt=Math.min((now-lastTime)/1000,.04);lastTime=now;const{hKm,vKms,r,vc,ratio}=values();if(!paused)phase+=dt*.075*Math.max(.12,Math.min(2.7,vKms/Math.max(vc,.1)));const w=canvas.clientWidth,h=canvas.clientHeight;ctx.clearRect(0,0,w,h);stars(w,h);const cx=w/2,cy=h/2+12,earthR=Math.min(w,h)*.135,rVisual=earthR+45+Math.sqrt(hKm/40000)*(Math.min(w,h)*.43-earthR-45);const tr=makeTrajectory(cx,cy,rVisual,ratio,earthR,r);const col=tr.type==='impact'?'rgba(255,123,123,.88)':(ratio>=Math.sqrt(2)*.995?'rgba(255,123,123,.88)':(Math.abs(ratio-1)<.08?'rgba(125,223,146,.86)':'rgba(255,207,110,.76)'));path(tr.pts,col,(ratio>=Math.sqrt(2)*.995||tr.type==='impact')?3:2.7);let ph=phase%1;if(tr.type!=='ellipse')ph=(phase*.75)%1;const idx=Math.min(tr.pts.length-1,Math.max(0,Math.floor(ph*(tr.pts.length-1)))),p=tr.pts[idx],ang=tangent(tr.pts,idx);ctx.beginPath();ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1.5;ctx.moveTo(cx,cy);ctx.lineTo(p.x,p.y);ctx.stroke();earth(cx,cy,earthR);const sc=(ratio>=Math.sqrt(2)*.995||tr.type==='impact')?'#ff7b7b':(Math.abs(ratio-1)<.08?'#7ddf92':'#ffcf6e');sat(p.x,p.y,ang,sc);const L=54+Math.min(70,vKms*5),tx=Math.cos(ang),ty=Math.sin(ang),ax=p.x+tx*L,ay=p.y+ty*L;ctx.beginPath();ctx.strokeStyle=sc;ctx.lineWidth=3;ctx.moveTo(p.x,p.y);ctx.lineTo(ax,ay);ctx.stroke();ctx.beginPath();ctx.fillStyle=sc;ctx.moveTo(ax,ay);ctx.lineTo(ax-tx*12-ty*6,ay-ty*12+tx*6);ctx.lineTo(ax-tx*12+ty*6,ay-ty*12-tx*6);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(234,242,255,.92)';ctx.font='700 14px system-ui';ctx.fillText('Země',cx-18,cy+5);ctx.fillText('v',ax+6,ay+4);ctx.fillStyle='rgba(159,179,209,.95)';ctx.font='13px system-ui';ctx.fillText(`h = ${czInt(hKm)} km`,p.x+12,p.y-14);if(tr.type==='impact'&&tr.pts.length){const q=tr.pts[tr.pts.length-1];ctx.save();ctx.strokeStyle='#ff7b7b';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(q.x-9,q.y-9);ctx.lineTo(q.x+9,q.y+9);ctx.moveTo(q.x+9,q.y-9);ctx.lineTo(q.x-9,q.y+9);ctx.stroke();ctx.restore()}requestAnimationFrame(draw)}
+hRange.oninput=vRange.oninput=updateTexts;document.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{hRange.value=b.dataset.h;vRange.value=(Math.sqrt(MU/(R_E+Number(hRange.value)*1000))/1000).toFixed(2);updateTexts()});document.getElementById('setCircular').onclick=()=>{vRange.value=values().vc.toFixed(2);updateTexts()};document.getElementById('setEscape').onclick=()=>{vRange.value=Math.min(16,values().ve).toFixed(2);updateTexts()};document.getElementById('setImpact').onclick=()=>{vRange.value=values().vImpact.toFixed(2);updateTexts()};pauseBtn.onclick=()=>{paused=!paused;pauseBtn.textContent=paused?'Spustit':'Pauza'};addEventListener('resize',resize);if(!CanvasRenderingContext2D.prototype.roundRect){CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);return this}}
 resize();updateTexts();requestAnimationFrame(draw);
 </script>
 </body>
