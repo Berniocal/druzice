@@ -68,8 +68,8 @@ function updateTexts(){
    rpVal.className=rp<R_E?'big bad':'big ok';
  }
 
- calcCircular.innerHTML=`\[r=R_Z+h=6\,371\,\text{km}+${czInt(hKm)}\,\text{km}\]\[r=${czInt(r/1000)}\,\text{km}=${cz(r,0)}\,\text{m}\]\[v_k=\sqrt{\frac{GM_Z}{r}}\]\[v_k=\sqrt{\frac{3{,}986\cdot10^{14}}{${cz(r,0)}}}\]\[v_k\doteq ${cz(vc)}\,\text{km·s}^{-1}\]`;
- calcEscape.innerHTML=`\[v_u=\sqrt{\frac{2GM_Z}{r}}\]\[v_u=\sqrt{\frac{2\cdot3{,}986\cdot10^{14}}{${cz(r,0)}}}\]\[v_u\doteq ${cz(ve)}\,\text{km·s}^{-1}\]\[v_u=\sqrt2\,v_k\]`;
+ calcCircular.innerHTML=String.raw`\[r=R_Z+h=6\,371\,\text{km}+${czInt(hKm)}\,\text{km}\]\[r=${czInt(r/1000)}\,\text{km}=${cz(r,0)}\,\text{m}\]\[v_k=\sqrt{\frac{GM_Z}{r}}\]\[v_k=\sqrt{\frac{3{,}986\cdot10^{14}}{${cz(r,0)}}}\]\[v_k\doteq ${cz(vc)}\,\text{km·s}^{-1}\]`;
+ calcEscape.innerHTML=String.raw`\[v_u=\sqrt{\frac{2GM_Z}{r}}\]\[v_u=\sqrt{\frac{2\cdot3{,}986\cdot10^{14}}{${cz(r,0)}}}\]\[v_u\doteq ${cz(ve)}\,\text{km·s}^{-1}\]\[v_u=\sqrt2\,v_k\]`;
 
  let t,s,c;
  if(vKms<.25*vc){
@@ -80,14 +80,14 @@ function updateTexts(){
    t='Náraz do Země';
    s=`Eliptická dráha protne povrch Země. Kritická rychlost pro tuto výšku je ${cz(vImpact)} km·s⁻¹.`;
    c='var(--bad)';
+ }else if(Math.abs(vKms-vc)/vc<.08){
+   t='Přibližně kruhová dráha';
+   s='Rychlost je velmi blízko kruhové rychlosti, proto je trajektorie v obrázku téměř kruhová.';
+   c='var(--ok)';
  }else if(vKms<vc){
    t='Eliptická dráha dovnitř';
    s='Rychlost je menší než kruhová. Družice se přibližuje k Zemi, ale periapsida je ještě nad povrchem.';
    c='var(--warn)';
- }else if(Math.abs(vKms-vc)/vc<.015){
-   t='Kruhová dráha';
-   s='Rychlost odpovídá kruhové trajektorii v dané výšce.';
-   c='var(--ok)';
  }else if(vKms<ve){
    t='Eliptická dráha ven';
    s='Rychlost je větší než kruhová, ale menší než úniková. Družice zůstává gravitačně vázaná.';
@@ -200,7 +200,7 @@ function earth(cx,cy,R){const g=ctx.createRadialGradient(cx-R*.35,cy-R*.35,R*.1,
 function sat(x,y,ang,color){ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.fillStyle='#d9e7ff';ctx.strokeStyle='rgba(255,255,255,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(-8,-8,16,16,4);ctx.fill();ctx.stroke();ctx.fillStyle=color;ctx.fillRect(-34,-5,24,10);ctx.fillRect(10,-5,24,10);ctx.strokeRect(-34,-5,24,10);ctx.strokeRect(10,-5,24,10);ctx.restore()}
 function tangent(pts,i){const a=pts[Math.max(0,i-2)],b=pts[Math.min(pts.length-1,i+2)];return Math.atan2(b.y-a.y,b.x-a.x)}
 function draw(now){const dt=Math.min((now-lastTime)/1000,.04);lastTime=now;const{hKm,vKms,r,vc,ratio}=values();if(!paused)phase+=dt*.075*Math.max(.12,Math.min(2.7,vKms/Math.max(vc,.1)));const w=canvas.clientWidth,h=canvas.clientHeight;ctx.clearRect(0,0,w,h);stars(w,h);const cx=w/2,cy=h/2+12,earthR=Math.min(w,h)*.135,rVisual=earthR+45+Math.sqrt(hKm/40000)*(Math.min(w,h)*.43-earthR-45);const tr=makeTrajectory(cx,cy,rVisual,ratio,earthR,r);const col=tr.type==='impact'?'rgba(255,123,123,.88)':(ratio>=Math.sqrt(2)*.995?'rgba(255,123,123,.88)':(Math.abs(ratio-1)<.08?'rgba(125,223,146,.86)':'rgba(255,207,110,.76)'));path(tr.pts,col,(ratio>=Math.sqrt(2)*.995||tr.type==='impact')?3:2.7);let ph=phase%1;if(tr.type!=='ellipse')ph=(phase*.75)%1;const idx=Math.min(tr.pts.length-1,Math.max(0,Math.floor(ph*(tr.pts.length-1)))),p=tr.pts[idx],ang=tangent(tr.pts,idx);ctx.beginPath();ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1.5;ctx.moveTo(cx,cy);ctx.lineTo(p.x,p.y);ctx.stroke();earth(cx,cy,earthR);const sc=(ratio>=Math.sqrt(2)*.995||tr.type==='impact')?'#ff7b7b':(Math.abs(ratio-1)<.08?'#7ddf92':'#ffcf6e');sat(p.x,p.y,ang,sc);const L=54+Math.min(70,vKms*5),tx=Math.cos(ang),ty=Math.sin(ang),ax=p.x+tx*L,ay=p.y+ty*L;ctx.beginPath();ctx.strokeStyle=sc;ctx.lineWidth=3;ctx.moveTo(p.x,p.y);ctx.lineTo(ax,ay);ctx.stroke();ctx.beginPath();ctx.fillStyle=sc;ctx.moveTo(ax,ay);ctx.lineTo(ax-tx*12-ty*6,ay-ty*12+tx*6);ctx.lineTo(ax-tx*12+ty*6,ay-ty*12-tx*6);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(234,242,255,.92)';ctx.font='700 14px system-ui';ctx.fillText('Země',cx-18,cy+5);ctx.fillText('v',ax+6,ay+4);ctx.fillStyle='rgba(159,179,209,.95)';ctx.font='13px system-ui';ctx.fillText(`h = ${czInt(hKm)} km`,p.x+12,p.y-14);if(tr.type==='impact'&&tr.pts.length){const q=tr.pts[tr.pts.length-1];ctx.save();ctx.strokeStyle='#ff7b7b';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(q.x-9,q.y-9);ctx.lineTo(q.x+9,q.y+9);ctx.moveTo(q.x+9,q.y-9);ctx.lineTo(q.x-9,q.y+9);ctx.stroke();ctx.restore()}requestAnimationFrame(draw)}
-hRange.oninput=vRange.oninput=updateTexts;document.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{hRange.value=b.dataset.h;vRange.value=(Math.sqrt(MU/(R_E+Number(hRange.value)*1000))/1000).toFixed(2);updateTexts()});document.getElementById('setCircular').onclick=()=>{vRange.value=values().vc.toFixed(2);updateTexts()};document.getElementById('setEscape').onclick=()=>{vRange.value=Math.min(16,values().ve).toFixed(2);updateTexts()};document.getElementById('setImpact').onclick=()=>{vRange.value=values().vImpact.toFixed(2);updateTexts()};pauseBtn.onclick=()=>{paused=!paused;pauseBtn.textContent=paused?'Spustit':'Pauza'};addEventListener('resize',resize);if(!CanvasRenderingContext2D.prototype.roundRect){CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);return this}}
+hRange.oninput=vRange.oninput=updateTexts;document.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{hRange.value=b.dataset.h;vRange.value=(Math.sqrt(MU/(R_E+Number(hRange.value)*1000))/1000).toFixed(2);updateTexts()});document.getElementById('setCircular').onclick=()=>{vRange.value=values().vc.toFixed(2);updateTexts()};document.getElementById('setEscape').onclick=()=>{vRange.value=Math.min(16,values().ve).toFixed(2);updateTexts()};document.getElementById('setImpact').onclick=()=>{const vi=values().vImpact;vRange.value=(vi+0.02).toFixed(2);updateTexts()};pauseBtn.onclick=()=>{paused=!paused;pauseBtn.textContent=paused?'Spustit':'Pauza'};addEventListener('resize',resize);if(!CanvasRenderingContext2D.prototype.roundRect){CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);return this}}
 resize();updateTexts();requestAnimationFrame(draw);
 </script>
 </body>
